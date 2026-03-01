@@ -1,0 +1,22 @@
+# Docs (local design notes, not for GitHub)
+doc/
+
+# Runtime logs
+logs/
+*.log
+
+# Agent runtime state (local only)
+memory/
+sessions/
+
+# Local skills sandbox
+skills_local/
+
+# Python / tooling
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Packaging artifacts
+*.egg-info/
