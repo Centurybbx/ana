@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aha-agent"
+name = "ana-agent"
 version = "0.1.0"
-description = "AHA MVP - minimal ReAct agent with policy-guarded tools"
+description = "ANA MVP - minimal ReAct agent with policy-guarded tools"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -33,7 +33,7 @@ dev = [
 ]
 
 [project.scripts]
-aha = "aha.cli:app"
+ana = "ana.cli:app"
 
 [tool.setuptools]
-packages = ["aha", "aha.app", "aha.channels", "aha.core", "aha.providers", "aha.tools"]
+packages = ["ana", "ana.app", "ana.channels", "ana.core", "ana.providers", "ana.tools"]

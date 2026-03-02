@@ -4,7 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
-from aha.cli import app
+from ana.cli import app
 
 
 def test_cli_slash_new_switches_session(tmp_path):

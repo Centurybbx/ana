@@ -5,8 +5,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from aha.cli import app
-from aha.evals import load_benchmark_tasks
+from ana.cli import app
+from ana.evals import load_benchmark_tasks
 
 
 def test_core_regression_dataset_has_minimum_examples():

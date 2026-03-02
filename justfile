@@ -8,17 +8,17 @@ install:
     set -euo pipefail
     uv sync
 
-# Start interactive chat (defaults to config in ~/.aha/config.json)
+# Start interactive chat (defaults to config in ~/.ana/config.json)
 chat:
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run aha
+    uv run ana
 
 # Doctor ping (connectivity)
 doctor:
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run aha doctor --ping
+    uv run ana doctor --ping
 
 # Run tests
 test:

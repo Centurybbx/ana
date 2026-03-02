@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aha.tools.path_utils import is_within, is_within_any, resolve_candidate
+from ana.tools.path_utils import is_within, is_within_any, resolve_candidate
 
 
 def test_resolve_candidate_relative_and_absolute(tmp_path):

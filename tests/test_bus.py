@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from aha.bus import EventBus, InboundMessage, MessageBus, OutboundMessage, sanitize_session_key, session_id_from_key
+from ana.bus import EventBus, InboundMessage, MessageBus, OutboundMessage, sanitize_session_key, session_id_from_key
 
 
 def test_inbound_session_key_uses_override() -> None:

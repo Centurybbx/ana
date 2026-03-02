@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from aha.tools.skill_lint import lint_skill_document, lint_status
-from aha.tools.skill_manifest import parse_and_normalize_manifest
+from ana.tools.skill_lint import lint_skill_document, lint_status
+from ana.tools.skill_manifest import parse_and_normalize_manifest
 
 
 def _lint(content: str):

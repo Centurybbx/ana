@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from aha.core.session import RuntimeSessionState
-from aha.tools.policy import ToolPolicy
+from ana.core.session import RuntimeSessionState
+from ana.tools.policy import ToolPolicy
 
 
 def test_skill_manager_list_and_check_use_read_capability(tmp_path):

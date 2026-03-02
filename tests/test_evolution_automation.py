@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aha.cli import run_auto_evolution_cycle
-from aha.config import load_config
-from aha.evolve import proposals_dir
-from aha.tools.memory import MemoryStore
+from ana.cli import run_auto_evolution_cycle
+from ana.config import load_config
+from ana.evolve import proposals_dir
+from ana.tools.memory import MemoryStore
 
 
 def test_run_auto_evolution_cycle_generates_validated_proposal(tmp_path):

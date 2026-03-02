@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from aha.core.session import RuntimeSessionState
-from aha.tools.fs import WriteFileTool
-from aha.tools.policy import ToolPolicy
+from ana.core.session import RuntimeSessionState
+from ana.tools.fs import WriteFileTool
+from ana.tools.policy import ToolPolicy
 
 
 def test_write_to_skills_local_allowed_by_policy_and_tool(tmp_path):

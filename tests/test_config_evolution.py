@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aha.config import AhaConfig
+from ana.config import AnaConfig
 
 
 def test_resolved_evolution_interval_seconds_presets_and_custom(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    daily = AhaConfig(workspace_dir=workspace, evolution_schedule="daily")
-    weekly = AhaConfig(workspace_dir=workspace, evolution_schedule="weekly")
-    custom = AhaConfig(workspace_dir=workspace, evolution_schedule="custom", evolution_custom_interval_minutes=90)
+    daily = AnaConfig(workspace_dir=workspace, evolution_schedule="daily")
+    weekly = AnaConfig(workspace_dir=workspace, evolution_schedule="weekly")
+    custom = AnaConfig(workspace_dir=workspace, evolution_schedule="custom", evolution_custom_interval_minutes=90)
 
     assert daily.resolved_evolution_interval_seconds() == 24 * 60 * 60
     assert weekly.resolved_evolution_interval_seconds() == 7 * 24 * 60 * 60
@@ -21,7 +21,7 @@ def test_resolved_evolution_interval_seconds_presets_and_custom(tmp_path):
 def test_resolved_evolution_dataset_overrides_are_workspace_relative(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    cfg = AhaConfig(
+    cfg = AnaConfig(
         workspace_dir=workspace,
         evolution_dataset_overrides={"core_regression": "benchmarks/custom_core.json"},
     )

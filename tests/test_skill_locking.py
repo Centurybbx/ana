@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from aha.tools.skill_manager import SkillManagerTool
+from ana.tools.skill_manager import SkillManagerTool
 
 
 def _read_json(payload: str) -> dict:

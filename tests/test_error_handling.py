@@ -6,13 +6,13 @@ import asyncio
 import json
 from unittest.mock import MagicMock
 
-from aha.core.loop import AgentLoop
-from aha.core.session import RuntimeSessionState, Session
-from aha.providers.base import LLMResponse, LLMToolCall
-from aha.tools.base import Tool, ToolResult
-from aha.tools.policy import ToolPolicy
-from aha.tools.registry import ToolRegistry
-from aha.tools.runner import ToolRunner
+from ana.core.loop import AgentLoop
+from ana.core.session import RuntimeSessionState, Session
+from ana.providers.base import LLMResponse, LLMToolCall
+from ana.tools.base import Tool, ToolResult
+from ana.tools.policy import ToolPolicy
+from ana.tools.registry import ToolRegistry
+from ana.tools.runner import ToolRunner
 
 
 class _ExplodingTool(Tool):

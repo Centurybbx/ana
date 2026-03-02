@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "aha-agent"
+name = "ana-agent"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

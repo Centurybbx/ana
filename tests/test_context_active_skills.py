@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from aha.core.context import ContextWeaver
-from aha.core.context import ContextInput
-from aha.core.loop import AgentLoop
-from aha.core.session import RuntimeSessionState, Session
-from aha.providers.base import LLMResponse
-from aha.tools.memory import MemoryStore
+from ana.core.context import ContextWeaver
+from ana.core.context import ContextInput
+from ana.core.loop import AgentLoop
+from ana.core.session import RuntimeSessionState, Session
+from ana.providers.base import LLMResponse
+from ana.tools.memory import MemoryStore
 
 
 def test_context_injects_structured_active_skill_summaries(tmp_path):

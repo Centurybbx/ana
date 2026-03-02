@@ -4,8 +4,8 @@ import json
 
 from typer.testing import CliRunner
 
-from aha.cli import app
-from aha.tools.memory import MemoryStore
+from ana.cli import app
+from ana.tools.memory import MemoryStore
 
 
 def _write_config(tmp_path, workspace):

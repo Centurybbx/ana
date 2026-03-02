@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 
-from aha.tools.skill_manager import SkillManagerTool
-from aha.tools.skill_resolution import resolve_skill_views
+from ana.tools.skill_manager import SkillManagerTool
+from ana.tools.skill_resolution import resolve_skill_views
 
 
 def test_resolution_prefers_local_enabled_over_built_in(tmp_path):

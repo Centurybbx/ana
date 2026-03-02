@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from aha.core.session import RuntimeSessionState
-from aha.tools.policy import ToolPolicy
+from ana.core.session import RuntimeSessionState
+from ana.tools.policy import ToolPolicy
 
 
 def test_skill_constraint_blocks_tool_not_in_allowed_list(tmp_path):

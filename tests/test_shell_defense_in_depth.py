@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from aha.tools.shell import ShellTool
+from ana.tools.shell import ShellTool
 
 
 def test_shell_tool_blocks_python_c(tmp_path):

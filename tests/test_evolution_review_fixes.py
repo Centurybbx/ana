@@ -6,18 +6,18 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from aha.cli import app
-from aha.core.context import ContextWeaver
-from aha.core.loop import AgentLoop
-from aha.core.session import RuntimeSessionState, Session
-from aha.evals import run_offline_eval
-from aha.evolve import build_failure_reports, load_proposal, save_proposal
-from aha.providers.base import LLMResponse, LLMToolCall
-from aha.tools.fs import ReadFileTool, WriteFileTool
-from aha.tools.memory import MemoryStore
-from aha.tools.policy import ToolPolicy
-from aha.tools.registry import ToolRegistry
-from aha.tools.runner import ToolRunner
+from ana.cli import app
+from ana.core.context import ContextWeaver
+from ana.core.loop import AgentLoop
+from ana.core.session import RuntimeSessionState, Session
+from ana.evals import run_offline_eval
+from ana.evolve import build_failure_reports, load_proposal, save_proposal
+from ana.providers.base import LLMResponse, LLMToolCall
+from ana.tools.fs import ReadFileTool, WriteFileTool
+from ana.tools.memory import MemoryStore
+from ana.tools.policy import ToolPolicy
+from ana.tools.registry import ToolRegistry
+from ana.tools.runner import ToolRunner
 
 
 def _write_config(tmp_path: Path, workspace: Path) -> Path:

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from aha.bus import MessageBus, OutboundMessage
-from aha.channels.base import BaseChannel
-from aha.channels.manager import ChannelManager
+from ana.bus import MessageBus, OutboundMessage
+from ana.channels.base import BaseChannel
+from ana.channels.manager import ChannelManager
 
 
 class FakeChannel(BaseChannel):

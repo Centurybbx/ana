@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 
-from aha.core.context import ContextWeaver
-from aha.core.loop import AgentLoop
-from aha.core.session import RuntimeSessionState, Session
-from aha.providers.base import LLMResponse
-from aha.tools.memory import MemoryStore
-from aha.tools.skill_manager import SkillManagerTool
+from ana.core.context import ContextWeaver
+from ana.core.loop import AgentLoop
+from ana.core.session import RuntimeSessionState, Session
+from ana.providers.base import LLMResponse
+from ana.tools.memory import MemoryStore
+from ana.tools.skill_manager import SkillManagerTool
 
 
 def _read_json(result_data: str) -> dict:

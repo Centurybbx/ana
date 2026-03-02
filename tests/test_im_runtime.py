@@ -3,17 +3,17 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from aha.app.im_runtime import IMRuntime
-from aha.bus import InboundMessage, MessageBus, session_id_from_key
-from aha.core.context import ContextWeaver
-from aha.core.loop import AgentLoop
-from aha.core.session import SessionStore
-from aha.providers.base import LLMProvider, LLMResponse, LLMToolCall
-from aha.tools.fs import WriteFileTool
-from aha.tools.memory import MemoryStore
-from aha.tools.policy import ToolPolicy
-from aha.tools.registry import ToolRegistry
-from aha.tools.runner import ToolRunner
+from ana.app.im_runtime import IMRuntime
+from ana.bus import InboundMessage, MessageBus, session_id_from_key
+from ana.core.context import ContextWeaver
+from ana.core.loop import AgentLoop
+from ana.core.session import SessionStore
+from ana.providers.base import LLMProvider, LLMResponse, LLMToolCall
+from ana.tools.fs import WriteFileTool
+from ana.tools.memory import MemoryStore
+from ana.tools.policy import ToolPolicy
+from ana.tools.registry import ToolRegistry
+from ana.tools.runner import ToolRunner
 
 
 class SleepyEchoProvider(LLMProvider):

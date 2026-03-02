@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 
-from aha.tools.skill_manager import SkillManagerTool
+from ana.tools.skill_manager import SkillManagerTool
 
 
 def _json(data: str) -> dict:

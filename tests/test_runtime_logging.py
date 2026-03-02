@@ -6,9 +6,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from aha.cli import app
-from aha.config import AhaConfig
-from aha.runtime_log import configure_runtime_logging, log_event
+from ana.cli import app
+from ana.config import AnaConfig
+from ana.runtime_log import configure_runtime_logging, log_event
 
 
 def _flush_handlers(logger: logging.Logger) -> None:
@@ -18,7 +18,7 @@ def _flush_handlers(logger: logging.Logger) -> None:
 
 def test_runtime_log_creates_file_and_redacts(tmp_path):
     workspace = tmp_path / "workspace"
-    config = AhaConfig(
+    config = AnaConfig(
         workspace_dir=workspace,
         runtime_log_dir=Path("logs"),
         runtime_log_mode="debug",
@@ -44,7 +44,7 @@ def test_runtime_log_creates_file_and_redacts(tmp_path):
 
 def test_runtime_log_level_debug_vs_prod(tmp_path):
     prod_workspace = tmp_path / "prod"
-    prod_config = AhaConfig(workspace_dir=prod_workspace, runtime_log_mode="prod")
+    prod_config = AnaConfig(workspace_dir=prod_workspace, runtime_log_mode="prod")
     prod_logger, prod_log_path = configure_runtime_logging(prod_config, interactive=True)
     assert prod_log_path is not None
 
@@ -57,7 +57,7 @@ def test_runtime_log_level_debug_vs_prod(tmp_path):
     assert "event=debug_hidden" not in prod_content
 
     debug_workspace = tmp_path / "debug"
-    debug_config = AhaConfig(workspace_dir=debug_workspace, runtime_log_mode="debug")
+    debug_config = AnaConfig(workspace_dir=debug_workspace, runtime_log_mode="debug")
     debug_logger, debug_log_path = configure_runtime_logging(debug_config, interactive=True)
     assert debug_log_path is not None
 
@@ -87,7 +87,7 @@ def test_cli_debug_flag_writes_start_event(tmp_path):
     )
 
     assert result.exit_code == 0
-    log_path = workspace / "logs" / "aha.debug.log"
+    log_path = workspace / "logs" / "ana.debug.log"
     assert log_path.exists()
     content = log_path.read_text(encoding="utf-8")
     assert "event=chat_start" in content

@@ -3,16 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 
-from aha.core.context import ContextWeaver
-from aha.core.loop import AgentLoop
-from aha.core.session import RuntimeSessionState, Session
-from aha.providers.base import LLMResponse, LLMToolCall
-from aha.tools.fs import WriteFileTool
-from aha.tools.memory import MemoryStore
-from aha.tools.policy import ToolPolicy
-from aha.tools.registry import ToolRegistry
-from aha.tools.runner import ToolRunner
-from aha.tools.shell import ShellTool
+from ana.core.context import ContextWeaver
+from ana.core.loop import AgentLoop
+from ana.core.session import RuntimeSessionState, Session
+from ana.providers.base import LLMResponse, LLMToolCall
+from ana.tools.fs import WriteFileTool
+from ana.tools.memory import MemoryStore
+from ana.tools.policy import ToolPolicy
+from ana.tools.registry import ToolRegistry
+from ana.tools.runner import ToolRunner
+from ana.tools.shell import ShellTool
 
 
 def test_trace_records_observability_fields_and_event_type(tmp_path):

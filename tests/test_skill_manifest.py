@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aha.tools.skill_manifest import parse_and_normalize_manifest
+from ana.tools.skill_manifest import parse_and_normalize_manifest
 
 
 def test_manifest_rejects_non_semver_version():
