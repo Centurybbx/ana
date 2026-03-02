@@ -25,6 +25,5 @@ class BaseChannel(ABC):
         content: str,
         reply_to: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         raise NotImplementedError
-

@@ -52,10 +52,11 @@ class AgentLoop:
         session_state: RuntimeSessionState,
         confirm: ConfirmFn,
     ) -> str:
-        session_id = session.session_id
-        with session_context(session_id):
-            session.messages.append({"role": "user", "content": user_input})
-            turn_index = self._turn_index(session.messages)
+            session_id = session.session_id
+            with session_context(session_id):
+                if not self._has_same_tail_user_message(session.messages, user_input):
+                    session.messages.append({"role": "user", "content": user_input})
+                turn_index = self._turn_index(session.messages)
             trace_id = uuid4().hex
             turn_span_id = trace_id
             memory_text = self.memory.read_memory()
@@ -310,6 +311,15 @@ class AgentLoop:
     @staticmethod
     def _turn_index(messages: list[dict]) -> int:
         return sum(1 for item in messages if str(item.get("role")) == "user")
+
+    @staticmethod
+    def _has_same_tail_user_message(messages: list[dict], user_input: str) -> bool:
+        if not messages:
+            return False
+        last = messages[-1]
+        if str(last.get("role", "")) != "user":
+            return False
+        return str(last.get("content", "")) == str(user_input)
 
     @staticmethod
     def _extract_tool_latency_ms(result: ToolResult) -> int | None:

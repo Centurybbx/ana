@@ -72,6 +72,58 @@ class WriteAttemptProvider(LLMProvider):
         )
 
 
+class SteerProvider(LLMProvider):
+    async def complete(self, messages: list[dict], tools: list[dict]) -> LLMResponse:
+        _ = tools
+        user_text = ""
+        for row in reversed(messages):
+            if row.get("role") == "user":
+                user_text = str(row.get("content", ""))
+                break
+        payload = user_text.rsplit("\n", 1)[-1].strip().lower()
+        if payload == "first":
+            await asyncio.sleep(0.2)
+            return LLMResponse(
+                content="first-response",
+                tool_calls=[],
+                raw_message={"role": "assistant", "content": "first-response"},
+            )
+        await asyncio.sleep(0.01)
+        return LLMResponse(
+            content="second-response",
+            tool_calls=[],
+            raw_message={"role": "assistant", "content": "second-response"},
+        )
+
+
+class StubbornSteerProvider(LLMProvider):
+    async def complete(self, messages: list[dict], tools: list[dict]) -> LLMResponse:
+        _ = tools
+        user_text = ""
+        for row in reversed(messages):
+            if row.get("role") == "user":
+                user_text = str(row.get("content", ""))
+                break
+        payload = user_text.rsplit("\n", 1)[-1].strip().lower()
+        if payload == "first":
+            try:
+                await asyncio.sleep(0.2)
+            except asyncio.CancelledError:
+                # Simulate providers that swallow cancellation and still return.
+                await asyncio.sleep(0.05)
+            return LLMResponse(
+                content="first-stale",
+                tool_calls=[],
+                raw_message={"role": "assistant", "content": "first-stale"},
+            )
+        await asyncio.sleep(0.01)
+        return LLMResponse(
+            content="second-fresh",
+            tool_calls=[],
+            raw_message={"role": "assistant", "content": "second-fresh"},
+        )
+
+
 def _build_loop(workspace: Path, provider: LLMProvider) -> AgentLoop:
     skills_local = workspace / "skills_local"
     skills_local.mkdir(parents=True, exist_ok=True)
@@ -123,6 +175,65 @@ def test_im_runtime_maps_session_id_and_serializes_same_session(tmp_path: Path) 
     asyncio.run(_run())
 
 
+def test_im_runtime_implicit_steer_latest_wins_and_keeps_history(tmp_path: Path) -> None:
+    async def _run() -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        loop = _build_loop(workspace, SteerProvider())
+        store = SessionStore(workspace / "sessions")
+        bus = MessageBus()
+        runtime = IMRuntime(agent_loop=loop, session_store=store, bus=bus)
+        await runtime.start()
+
+        await runtime.enqueue(InboundMessage(channel="discord", sender_id="u1", chat_id="c1", content="first"))
+        await asyncio.sleep(0.02)
+        await runtime.enqueue(InboundMessage(channel="discord", sender_id="u1", chat_id="c1", content="second"))
+        await asyncio.sleep(0.35)
+        await runtime.stop()
+
+        outbounds = []
+        while not bus.outbound.empty():
+            outbounds.append(bus.outbound.get_nowait())
+        user_visible = [item.content for item in outbounds if not str(item.content).startswith("[im-runtime-status]")]
+
+        assert "second-response" in user_visible
+        assert "first-response" not in user_visible
+
+        session = store.load(session_id_from_key("discord:c1"))
+        user_messages = [str(row.get("content", "")) for row in session.messages if row.get("role") == "user"]
+        assert any(content.endswith("\nfirst") for content in user_messages)
+        assert any(content.endswith("\nsecond") for content in user_messages)
+
+    asyncio.run(_run())
+
+
+def test_im_runtime_generation_guard_drops_stale_output(tmp_path: Path) -> None:
+    async def _run() -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        loop = _build_loop(workspace, StubbornSteerProvider())
+        store = SessionStore(workspace / "sessions")
+        bus = MessageBus()
+        runtime = IMRuntime(agent_loop=loop, session_store=store, bus=bus)
+        await runtime.start()
+
+        await runtime.enqueue(InboundMessage(channel="discord", sender_id="u1", chat_id="c1", content="first"))
+        await asyncio.sleep(0.02)
+        await runtime.enqueue(InboundMessage(channel="discord", sender_id="u1", chat_id="c1", content="second"))
+        await asyncio.sleep(0.35)
+        await runtime.stop()
+
+        outbounds = []
+        while not bus.outbound.empty():
+            outbounds.append(bus.outbound.get_nowait())
+        user_visible = [item.content for item in outbounds if not str(item.content).startswith("[im-runtime-status]")]
+
+        assert "second-fresh" in user_visible
+        assert "first-stale" not in user_visible
+
+    asyncio.run(_run())
+
+
 def test_im_runtime_denies_side_effect_by_default(tmp_path: Path) -> None:
     async def _run() -> None:
         workspace = tmp_path / "workspace"
@@ -140,4 +251,3 @@ def test_im_runtime_denies_side_effect_by_default(tmp_path: Path) -> None:
         assert not target.exists()
 
     asyncio.run(_run())
-

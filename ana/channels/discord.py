@@ -104,9 +104,10 @@ class DiscordChannel(BaseChannel):
         content: str,
         reply_to: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         if self._client is None:
             raise RuntimeError("discord channel is not started")
+        _ = metadata
         channel = self._client.get_channel(int(chat_id))
         if channel is None:
             channel = await self._client.fetch_channel(int(chat_id))
@@ -116,11 +117,12 @@ class DiscordChannel(BaseChannel):
         if reference is not None:
             try:
                 msg = await channel.fetch_message(reference)
-                await channel.send(content, reference=msg)
-                return
+                sent = await channel.send(content, reference=msg)
+                return _message_meta(sent)
             except Exception:
                 pass
-        await channel.send(content)
+        sent = await channel.send(content)
+        return _message_meta(sent)
 
     def _allowed_sender(self, author: Any) -> bool:
         if not self.allow_from:
@@ -153,3 +155,10 @@ class DiscordChannel(BaseChannel):
         if author is None or self._bot_user_id is None:
             return False
         return int(getattr(author, "id", -1)) == self._bot_user_id
+
+
+def _message_meta(message: Any) -> dict[str, Any] | None:
+    message_id = getattr(message, "id", None)
+    if message_id is None:
+        return None
+    return {"message_id": str(message_id)}

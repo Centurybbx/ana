@@ -59,8 +59,12 @@ class ChannelManager:
             except asyncio.CancelledError:
                 break
             try:
-                await self.dispatch_once(outbound)
+                result = await self.dispatch_once(outbound)
+                if outbound.ack is not None and not outbound.ack.done():
+                    outbound.ack.set_result(result)
             except Exception as exc:
+                if outbound.ack is not None and not outbound.ack.done():
+                    outbound.ack.set_exception(exc)
                 log_event(
                     self.logger,
                     "outbound_dispatch_error",
@@ -72,20 +76,29 @@ class ChannelManager:
                     error=str(exc),
                 )
 
-    async def dispatch_once(self, outbound: OutboundMessage) -> None:
+    async def dispatch_once(self, outbound: OutboundMessage) -> dict[str, object] | None:
         channel = self.channels.get(outbound.channel)
         if channel is None:
-            return
+            return None
         limit = _message_limit(outbound.channel)
         chunks = _split_message(outbound.content, limit=limit)
+        first_result: dict[str, object] | None = None
         for idx, chunk in enumerate(chunks):
             reply_to = outbound.reply_to if idx == 0 else None
-            await channel.send(
+            metadata = outbound.metadata
+            if idx > 0 and isinstance(metadata, dict):
+                metadata = dict(metadata)
+                metadata.pop("telegram_edit_message_id", None)
+                metadata.pop("telegram_action", None)
+            result = await channel.send(
                 chat_id=outbound.chat_id,
                 content=chunk,
                 reply_to=reply_to,
-                metadata=outbound.metadata,
+                metadata=metadata,
             )
+            if idx == 0 and isinstance(result, dict):
+                first_result = result
+        return first_result
 
 
 def _message_limit(channel: str) -> int:

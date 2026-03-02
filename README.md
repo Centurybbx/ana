@@ -55,6 +55,9 @@ uv run ana im
 
 Channel config is under `~/.ana/config.json` in the `channels` field.
 
+UX and implicit-steer design:
+- `IM_UX_STEERING_PROPOSAL.md`
+
 ## Core commands
 
 ```bash

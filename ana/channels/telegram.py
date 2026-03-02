@@ -95,14 +95,27 @@ class TelegramChannel(BaseChannel):
         content: str,
         reply_to: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         if self._app is None:
             raise RuntimeError("telegram channel is not started")
-        _ = metadata
+        metadata = dict(metadata or {})
         chat_id_int = int(chat_id)
+        action = str(metadata.get("telegram_action") or "").strip()
+        if action:
+            await self._app.bot.send_chat_action(chat_id=chat_id_int, action=action)
+            return None
+        edit_message_id = str(metadata.get("telegram_edit_message_id") or "").strip()
+        if edit_message_id:
+            message_id_int = int(edit_message_id)
+            await self._app.bot.edit_message_text(
+                chat_id=chat_id_int,
+                message_id=message_id_int,
+                text=content,
+            )
+            return {"message_id": str(message_id_int)}
         if not reply_to:
-            await self._app.bot.send_message(chat_id=chat_id_int, text=content)
-            return
+            sent = await self._app.bot.send_message(chat_id=chat_id_int, text=content)
+            return _message_meta(sent)
         try:
             reply_id = int(reply_to)
         except ValueError:
@@ -113,15 +126,15 @@ class TelegramChannel(BaseChannel):
                 chat_id=chat_id,
                 reply_to=reply_to,
             )
-            await self._app.bot.send_message(chat_id=chat_id_int, text=content)
-            return
+            sent = await self._app.bot.send_message(chat_id=chat_id_int, text=content)
+            return _message_meta(sent)
         try:
-            await self._app.bot.send_message(
+            sent = await self._app.bot.send_message(
                 chat_id=chat_id_int,
                 text=content,
                 reply_parameters={"message_id": reply_id},
             )
-            return
+            return _message_meta(sent)
         except TypeError as exc:
             if "reply_parameters" not in str(exc):
                 log_event(
@@ -151,11 +164,12 @@ class TelegramChannel(BaseChannel):
             )
             raise
         try:
-            await self._app.bot.send_message(
+            sent = await self._app.bot.send_message(
                 chat_id=chat_id_int,
                 text=content,
                 reply_to_message_id=reply_id,
             )
+            return _message_meta(sent)
         except Exception as exc:
             log_event(
                 self.logger,
@@ -192,3 +206,10 @@ class TelegramChannel(BaseChannel):
         if from_user is None or self._bot_id is None:
             return False
         return int(getattr(from_user, "id", -1)) == self._bot_id
+
+
+def _message_meta(message: Any) -> dict[str, Any] | None:
+    message_id = getattr(message, "message_id", None)
+    if message_id is None:
+        return None
+    return {"message_id": str(message_id)}

@@ -650,6 +650,7 @@ def chat(
     log_dir: Optional[Path] = typer.Option(None, "--log-dir", help="Override runtime log directory"),
     no_runtime_log: bool = typer.Option(False, "--no-runtime-log", help="Disable runtime log output"),
 ) -> None:
+    console.print("[dim]`ana chat` is deprecated for interactive collaboration. Prefer `ana serve` / `ana im`.[/dim]")
     provider_overrides = _provider_overrides(
         provider=provider,
         model=model,
