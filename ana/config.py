@@ -21,6 +21,13 @@ class AnaConfig(BaseModel):
     extra_headers: dict[str, str] = Field(default_factory=dict)
     max_steps: int = 30
     token_budget: int = 8000
+    context_recent_turns_window: int = 12
+    context_soft_limit_ratio: float = 0.75
+    context_hard_limit_ratio: float = 0.90
+    context_memory_top_k: int = 8
+    context_episode_compact_trigger_tokens: int = 12_000
+    context_enable_model_assisted_compaction: bool = False
+    context_event_schema_version: str = "v1"
     trace_include_sensitive_data: bool = False
     shell_timeout_seconds: int = 20
     trace_max_chars: int = 1200

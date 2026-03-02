@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from ana.context_manager.manager import ContextManager
+from ana.context_manager.store import ContextMemoryStore
 from ana.core.context import ContextInput, ContextWeaver
 from ana.core.session import RuntimeSessionState, Session
 from ana.providers.base import LLMProvider
@@ -33,6 +35,7 @@ class AgentLoop:
         skills_local: str | None = None,
         max_steps: int = 30,
         logger: logging.Logger | None = None,
+        context_manager: ContextManager | None = None,
     ):
         self.provider = provider
         self.tool_runner = tool_runner
@@ -44,6 +47,19 @@ class AgentLoop:
         self.skills_local = Path(skills_local).resolve() if skills_local else None
         self.max_steps = max_steps
         self.logger = logger or logging.getLogger("ana.loop")
+        self.context_manager = context_manager or ContextManager(
+            token_budget=self.context_weaver.token_budget,
+            soft_limit_ratio=0.75,
+            hard_limit_ratio=0.90,
+            recent_turns_window=12,
+            memory_top_k=8,
+            event_schema_version="v1",
+            memory_store=ContextMemoryStore(self.memory.trace_file.parent / "context_memory.jsonl"),
+            trace_sink=self.memory.append_trace,
+            model_assisted_compaction=False,
+            provider=self.provider,
+            episode_compact_trigger_tokens=12_000,
+        )
 
     async def run_turn(
         self,
@@ -52,244 +68,280 @@ class AgentLoop:
         session_state: RuntimeSessionState,
         confirm: ConfirmFn,
     ) -> str:
-            session_id = session.session_id
-            with session_context(session_id):
-                if not self._has_same_tail_user_message(session.messages, user_input):
-                    session.messages.append({"role": "user", "content": user_input})
-                turn_index = self._turn_index(session.messages)
-            trace_id = uuid4().hex
-            turn_span_id = trace_id
-            memory_text = self.memory.read_memory()
-            active_skills = self._active_skills()
-            session.active_skills = active_skills
-            session_state.active_skills = {
-                str(item.get("name")): item
-                for item in active_skills
-                if str(item.get("name", "")).strip()
+        session_id = session.session_id
+        with session_context(session_id):
+            if not self._has_same_tail_user_message(session.messages, user_input):
+                session.messages.append({"role": "user", "content": user_input})
+            turn_index = self._turn_index(session.messages)
+        trace_id = uuid4().hex
+        turn_span_id = trace_id
+        memory_text = self.memory.read_memory()
+        active_skills = self._active_skills()
+        session.active_skills = active_skills
+        session_state.active_skills = {
+            str(item.get("name")): item
+            for item in active_skills
+            if str(item.get("name", "")).strip()
+        }
+        system_prompt = self.context_weaver.build(
+            ContextInput(
+                workspace=self._workspace_path(),
+                memory_text=memory_text,
+                active_skills=active_skills,
+                tool_names=self.tool_names,
+            )
+        )
+        working_set = await self.context_manager.build_working_set(
+            session_messages=list(session.messages),
+            user_input=user_input,
+            trace_context={
+                "session_id": session_id,
+                "trace_id": trace_id,
+                "turn_index": turn_index,
+                "span_id": turn_span_id,
+                "parent_span_id": None,
+            },
+        )
+        messages = [{"role": "system", "content": system_prompt}] + list(working_set.messages)
+        log_event(
+            self.logger,
+            "turn_start",
+            level=logging.INFO,
+            user_len=len(user_input),
+            message_count=len(messages),
+            tool_count=len(self.tool_names),
+        )
+        self.memory.append_trace(
+            {
+                "session_id": session_id,
+                "trace_id": trace_id,
+                "turn_index": turn_index,
+                "event": "turn_start",
+                "event_type": "turn_start",
+                "user_text_excerpt": user_input,
+                "span_id": turn_span_id,
+                "parent_span_id": None,
             }
-            system_prompt = self.context_weaver.build(
-                ContextInput(
-                    workspace=self._workspace_path(),
-                    memory_text=memory_text,
-                    active_skills=active_skills,
-                    tool_names=self.tool_names,
-                )
-            )
-            messages = [{"role": "system", "content": system_prompt}] + list(session.messages)
-            log_event(
-                self.logger,
-                "turn_start",
-                level=logging.INFO,
-                user_len=len(user_input),
-                message_count=len(messages),
-                tool_count=len(self.tool_names),
-            )
-            self.memory.append_trace(
-                {
-                    "session_id": session_id,
-                    "trace_id": trace_id,
-                    "turn_index": turn_index,
-                    "event": "turn_start",
-                    "event_type": "turn_start",
-                    "user_text_excerpt": user_input,
-                    "span_id": turn_span_id,
-                    "parent_span_id": None,
-                }
-            )
+        )
+        tool_events: list[dict[str, Any]] = []
 
-            for step in range(1, self.max_steps + 1):
-                with step_context(step):
-                    step_span_id = f"{trace_id}:step:{step}"
-                    request_started = time.perf_counter()
-                    log_event(
-                        self.logger,
-                        "llm_request",
-                        level=logging.DEBUG,
-                        step=step,
-                        message_count=len(messages),
-                        tools_count=len(self.tool_names),
-                    )
+        for step in range(1, self.max_steps + 1):
+            with step_context(step):
+                step_span_id = f"{trace_id}:step:{step}"
+                request_started = time.perf_counter()
+                log_event(
+                    self.logger,
+                    "llm_request",
+                    level=logging.DEBUG,
+                    step=step,
+                    message_count=len(messages),
+                    tools_count=len(self.tool_names),
+                )
+                self.memory.append_trace(
+                    {
+                        "session_id": session_id,
+                        "trace_id": trace_id,
+                        "turn_index": turn_index,
+                        "step": step,
+                        "event": "llm_request",
+                        "event_type": "llm_request",
+                        "message_count": len(messages),
+                        "tools_count": len(self.tool_names),
+                        "span_id": step_span_id,
+                        "parent_span_id": turn_span_id,
+                    }
+                )
+                response = await self.provider.complete(messages=messages, tools=self._tool_schemas())
+                latency_ms = int((time.perf_counter() - request_started) * 1000)
+                usage = self._extract_usage(response)
+                log_event(
+                    self.logger,
+                    "llm_response",
+                    level=logging.INFO,
+                    step=step,
+                    latency_ms=latency_ms,
+                    tool_calls_count=len(response.tool_calls),
+                    assistant_len=len(response.content or ""),
+                )
+                self.memory.append_trace(
+                    {
+                        "session_id": session_id,
+                        "trace_id": trace_id,
+                        "turn_index": turn_index,
+                        "step": step,
+                        "event": "llm_response",
+                        "event_type": "llm_response",
+                        "latency_ms": latency_ms,
+                        "tool_calls_count": len(response.tool_calls),
+                        "assistant_len": len(response.content or ""),
+                        "prompt_tokens": usage["prompt_tokens"],
+                        "completion_tokens": usage["completion_tokens"],
+                        "total_tokens": usage["total_tokens"],
+                        "cost_estimate": usage["cost_estimate"],
+                        "span_id": step_span_id,
+                        "parent_span_id": turn_span_id,
+                    }
+                )
+
+                if not response.tool_calls:
+                    final_text = response.content or ""
+                    messages.append({"role": "assistant", "content": final_text})
+                    session.messages.append({"role": "assistant", "content": final_text})
                     self.memory.append_trace(
                         {
                             "session_id": session_id,
                             "trace_id": trace_id,
                             "turn_index": turn_index,
+                            "event": "assistant_final",
+                            "event_type": "assistant_final",
                             "step": step,
-                            "event": "llm_request",
-                            "event_type": "llm_request",
-                            "message_count": len(messages),
-                            "tools_count": len(self.tool_names),
-                            "span_id": step_span_id,
+                            "observation": final_text,
+                            "span_id": f"{trace_id}:final",
                             "parent_span_id": turn_span_id,
                         }
                     )
-                    response = await self.provider.complete(messages=messages, tools=self._tool_schemas())
-                    latency_ms = int((time.perf_counter() - request_started) * 1000)
-                    usage = self._extract_usage(response)
                     log_event(
                         self.logger,
-                        "llm_response",
+                        "turn_final",
                         level=logging.INFO,
                         step=step,
-                        latency_ms=latency_ms,
-                        tool_calls_count=len(response.tool_calls),
-                        assistant_len=len(response.content or ""),
+                        final_len=len(final_text),
                     )
-                    self.memory.append_trace(
-                        {
-                            "session_id": session_id,
-                            "trace_id": trace_id,
-                            "turn_index": turn_index,
-                            "step": step,
-                            "event": "llm_response",
-                            "event_type": "llm_response",
-                            "latency_ms": latency_ms,
-                            "tool_calls_count": len(response.tool_calls),
-                            "assistant_len": len(response.content or ""),
-                            "prompt_tokens": usage["prompt_tokens"],
-                            "completion_tokens": usage["completion_tokens"],
-                            "total_tokens": usage["total_tokens"],
-                            "cost_estimate": usage["cost_estimate"],
-                            "span_id": step_span_id,
-                            "parent_span_id": turn_span_id,
-                        }
+                    await self.context_manager.record_post_turn(
+                        session_id=session_id,
+                        trace_id=trace_id,
+                        turn_index=turn_index,
+                        user_input=user_input,
+                        assistant_text=final_text,
+                        tool_events=tool_events,
                     )
+                    return final_text
 
-                    if not response.tool_calls:
-                        final_text = response.content or ""
-                        messages.append({"role": "assistant", "content": final_text})
-                        session.messages.append({"role": "assistant", "content": final_text})
+                messages.append(response.raw_message)
+
+                for tool_pos, tool_call in enumerate(response.tool_calls, start=1):
+                    tool_call_id = (tool_call.call_id or f"call-{tool_pos}").strip() or f"call-{tool_pos}"
+                    tool_span_id = f"{trace_id}:step:{step}:tool:{tool_call_id}"
+                    with tool_context(tool_call.name):
+                        source_skill = self._extract_source_skill(tool_call.arguments)
                         self.memory.append_trace(
                             {
                                 "session_id": session_id,
                                 "trace_id": trace_id,
                                 "turn_index": turn_index,
-                                "event": "assistant_final",
-                                "event_type": "assistant_final",
+                                "event": "tool_call",
+                                "event_type": "tool_call",
                                 "step": step,
-                                "observation": final_text,
-                                "span_id": f"{trace_id}:final",
-                                "parent_span_id": turn_span_id,
+                                "tool": tool_call.name,
+                                "args": tool_call.arguments,
+                                "source_skill": source_skill,
+                                "span_id": tool_span_id,
+                                "parent_span_id": step_span_id,
                             }
                         )
                         log_event(
                             self.logger,
-                            "turn_final",
-                            level=logging.INFO,
+                            "tool_dispatch",
+                            level=logging.DEBUG,
                             step=step,
-                            final_len=len(final_text),
+                            tool_call=tool_call.name,
+                            source_skill=source_skill or "",
                         )
-                        return final_text
-
-                    messages.append(response.raw_message)
-
-                    for tool_pos, tool_call in enumerate(response.tool_calls, start=1):
-                        tool_call_id = (tool_call.call_id or f"call-{tool_pos}").strip() or f"call-{tool_pos}"
-                        tool_span_id = f"{trace_id}:step:{step}:tool:{tool_call_id}"
-                        with tool_context(tool_call.name):
-                            source_skill = self._extract_source_skill(tool_call.arguments)
-                            self.memory.append_trace(
-                                {
+                        try:
+                            result = await self.tool_runner.run(
+                                tool_call.name,
+                                tool_call.arguments,
+                                session_state=session_state,
+                                confirm=confirm,
+                                trace_context={
                                     "session_id": session_id,
                                     "trace_id": trace_id,
                                     "turn_index": turn_index,
-                                    "event": "tool_call",
-                                    "event_type": "tool_call",
                                     "step": step,
                                     "tool": tool_call.name,
-                                    "args": tool_call.arguments,
-                                    "source_skill": source_skill,
                                     "span_id": tool_span_id,
                                     "parent_span_id": step_span_id,
-                                }
+                                },
                             )
-                            log_event(
-                                self.logger,
-                                "tool_dispatch",
-                                level=logging.DEBUG,
-                                step=step,
-                                tool_call=tool_call.name,
-                                source_skill=source_skill or "",
+                        except Exception as exc:
+                            self.logger.error(
+                                "Unhandled tool exception for %s: %s",
+                                tool_call.name,
+                                exc,
+                                exc_info=True,
                             )
-                            try:
-                                result = await self.tool_runner.run(
-                                    tool_call.name,
-                                    tool_call.arguments,
-                                    session_state=session_state,
-                                    confirm=confirm,
-                                    trace_context={
-                                        "session_id": session_id,
-                                        "trace_id": trace_id,
-                                        "turn_index": turn_index,
-                                        "step": step,
-                                        "tool": tool_call.name,
-                                        "span_id": tool_span_id,
-                                        "parent_span_id": step_span_id,
-                                    },
-                                )
-                            except Exception as exc:
-                                self.logger.error(
-                                    "Unhandled tool exception for %s: %s",
-                                    tool_call.name,
-                                    exc,
-                                    exc_info=True,
-                                )
-                                result = ToolResult(
-                                    ok=False,
-                                    data=f"Internal error running {tool_call.name}: {exc}",
-                                    warnings=["unhandled_exception"],
-                                )
-                            tool_payload = {
-                                "ok": result.ok,
-                                "data": result.data,
-                                "warnings": result.warnings,
-                                "redactions": result.redactions,
-                                # Deprecated compatibility keys.
-                                "output": result.output,
-                                "meta": result.meta,
+                            result = ToolResult(
+                                ok=False,
+                                data=f"Internal error running {tool_call.name}: {exc}",
+                                warnings=["unhandled_exception"],
+                            )
+                        tool_payload = {
+                            "ok": result.ok,
+                            "data": result.data,
+                            "warnings": result.warnings,
+                            "redactions": result.redactions,
+                            # Deprecated compatibility keys.
+                            "output": result.output,
+                            "meta": result.meta,
+                        }
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call.call_id,
+                                "name": tool_call.name,
+                                "content": json.dumps(tool_payload, ensure_ascii=False),
                             }
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.call_id,
-                                    "name": tool_call.name,
-                                    "content": json.dumps(tool_payload, ensure_ascii=False),
-                                }
-                            )
-                            self.memory.append_trace(
-                                {
-                                    "session_id": session_id,
-                                    "trace_id": trace_id,
-                                    "turn_index": turn_index,
-                                    "event": "tool_result",
-                                    "event_type": "tool_result",
-                                    "step": step,
-                                    "tool": tool_call.name,
-                                    "source_skill": source_skill,
-                                    "status": "ok" if result.ok else "error",
-                                    "latency_ms": self._extract_tool_latency_ms(result),
-                                    "observation": result.data or "",
-                                    "span_id": tool_span_id,
-                                    "parent_span_id": step_span_id,
-                                }
-                            )
+                        )
+                        tool_events.append(
+                            {
+                                "step": step,
+                                "tool": tool_call.name,
+                                "status": "ok" if result.ok else "error",
+                                "observation": result.data or "",
+                            }
+                        )
+                        self.memory.append_trace(
+                            {
+                                "session_id": session_id,
+                                "trace_id": trace_id,
+                                "turn_index": turn_index,
+                                "event": "tool_result",
+                                "event_type": "tool_result",
+                                "step": step,
+                                "tool": tool_call.name,
+                                "source_skill": source_skill,
+                                "status": "ok" if result.ok else "error",
+                                "latency_ms": self._extract_tool_latency_ms(result),
+                                "observation": result.data or "",
+                                "span_id": tool_span_id,
+                                "parent_span_id": step_span_id,
+                            }
+                        )
 
-            exhausted = "Reached max steps without completing task."
-            session.messages.append({"role": "assistant", "content": exhausted})
-            self.memory.append_trace(
-                {
-                    "session_id": session_id,
-                    "trace_id": trace_id,
-                    "turn_index": turn_index,
-                    "event": "max_steps_exhausted",
-                    "event_type": "max_steps_exhausted",
-                    "observation": exhausted,
-                    "span_id": f"{trace_id}:max_steps",
-                    "parent_span_id": turn_span_id,
-                }
-            )
-            log_event(self.logger, "max_steps_exhausted", level=logging.WARNING, max_steps=self.max_steps)
-            return exhausted
+        exhausted = "Reached max steps without completing task."
+        session.messages.append({"role": "assistant", "content": exhausted})
+        self.memory.append_trace(
+            {
+                "session_id": session_id,
+                "trace_id": trace_id,
+                "turn_index": turn_index,
+                "event": "max_steps_exhausted",
+                "event_type": "max_steps_exhausted",
+                "observation": exhausted,
+                "span_id": f"{trace_id}:max_steps",
+                "parent_span_id": turn_span_id,
+            }
+        )
+        log_event(self.logger, "max_steps_exhausted", level=logging.WARNING, max_steps=self.max_steps)
+        await self.context_manager.record_post_turn(
+            session_id=session_id,
+            trace_id=trace_id,
+            turn_index=turn_index,
+            user_input=user_input,
+            assistant_text=exhausted,
+            tool_events=tool_events,
+        )
+        return exhausted
 
     def _tool_schemas(self) -> list[dict]:
         return [self.tool_runner.registry.get(name).schema() for name in self.tool_names]

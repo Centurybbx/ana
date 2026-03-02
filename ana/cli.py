@@ -24,6 +24,8 @@ from ana.channels.discord import DiscordChannel
 from ana.channels.manager import ChannelManager
 from ana.channels.telegram import TelegramChannel
 from ana.config import AnaConfig, load_config
+from ana.context_manager.manager import ContextManager
+from ana.context_manager.store import ContextMemoryStore
 from ana.core.context import ContextWeaver
 from ana.core.loop import AgentLoop
 from ana.core.session import RuntimeSessionState, Session, SessionStore
@@ -481,6 +483,19 @@ def _build_runtime(
         trace_sink=memory.append_trace,
     )
     provider = _select_provider(config, logger=runtime_logger)
+    context_manager = ContextManager(
+        token_budget=config.token_budget,
+        soft_limit_ratio=config.context_soft_limit_ratio,
+        hard_limit_ratio=config.context_hard_limit_ratio,
+        recent_turns_window=config.context_recent_turns_window,
+        memory_top_k=config.context_memory_top_k,
+        event_schema_version=config.context_event_schema_version,
+        memory_store=ContextMemoryStore(config.resolved_memory_dir() / "context_memory.jsonl"),
+        trace_sink=memory.append_trace,
+        model_assisted_compaction=config.context_enable_model_assisted_compaction,
+        provider=provider,
+        episode_compact_trigger_tokens=config.context_episode_compact_trigger_tokens,
+    )
     loop = AgentLoop(
         provider=provider,
         tool_runner=runner,
@@ -492,6 +507,7 @@ def _build_runtime(
         skills_local=str(config.resolved_skills_local_dir()),
         max_steps=config.max_steps,
         logger=runtime_logger.getChild("loop"),
+        context_manager=context_manager,
     )
     store = SessionStore(config.resolved_sessions_dir())
     return loop, store, memory, config, runtime_logger, runtime_log_path
@@ -525,6 +541,19 @@ def _build_eval_loop_from_config(config: AnaConfig, logger: logging.Logger | Non
         trace_sink=memory.append_trace,
     )
     provider = _select_provider(config, logger=logger)
+    context_manager = ContextManager(
+        token_budget=config.token_budget,
+        soft_limit_ratio=config.context_soft_limit_ratio,
+        hard_limit_ratio=config.context_hard_limit_ratio,
+        recent_turns_window=config.context_recent_turns_window,
+        memory_top_k=config.context_memory_top_k,
+        event_schema_version=config.context_event_schema_version,
+        memory_store=ContextMemoryStore(config.resolved_memory_dir() / "context_memory.jsonl"),
+        trace_sink=memory.append_trace,
+        model_assisted_compaction=config.context_enable_model_assisted_compaction,
+        provider=provider,
+        episode_compact_trigger_tokens=config.context_episode_compact_trigger_tokens,
+    )
     return AgentLoop(
         provider=provider,
         tool_runner=runner,
@@ -536,6 +565,7 @@ def _build_eval_loop_from_config(config: AnaConfig, logger: logging.Logger | Non
         skills_local=str(config.resolved_skills_local_dir()),
         max_steps=config.max_steps,
         logger=logger.getChild("loop.eval") if logger else None,
+        context_manager=context_manager,
     )
 
 
@@ -1106,6 +1136,64 @@ def eval_metrics(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     typer.echo(json.dumps(payload, ensure_ascii=False))
+
+
+@app.command("context-inspect")
+def context_inspect(
+    session_id: str = typer.Option(..., help="Session id to inspect"),
+    query: str = typer.Option(..., help="Current user query to build working context"),
+    config_path: Optional[Path] = typer.Option(None, help="Custom config file path"),
+) -> None:
+    config = load_config(path=config_path)
+    store = SessionStore(config.resolved_sessions_dir())
+    try:
+        session = store.load(session_id)
+    except FileNotFoundError:
+        console.print(f"[red]session not found: {session_id}[/red]")
+        raise typer.Exit(code=1)
+
+    memory = MemoryStore(
+        memory_file=config.resolved_memory_dir() / "MEMORY.md",
+        trace_file=config.resolved_memory_dir() / "TRACE.jsonl",
+        include_sensitive_data=config.trace_include_sensitive_data,
+        trace_max_chars=config.trace_max_chars,
+        trace_max_bytes=config.trace_max_bytes,
+    )
+    context_store = ContextMemoryStore(config.resolved_memory_dir() / "context_memory.jsonl")
+    manager = ContextManager(
+        token_budget=config.token_budget,
+        soft_limit_ratio=config.context_soft_limit_ratio,
+        hard_limit_ratio=config.context_hard_limit_ratio,
+        recent_turns_window=config.context_recent_turns_window,
+        memory_top_k=config.context_memory_top_k,
+        event_schema_version=config.context_event_schema_version,
+        memory_store=context_store,
+        trace_sink=memory.append_trace,
+        model_assisted_compaction=config.context_enable_model_assisted_compaction,
+        provider=None,
+        episode_compact_trigger_tokens=config.context_episode_compact_trigger_tokens,
+    )
+    working = asyncio.run(
+        manager.build_working_set(
+            session_messages=list(session.messages),
+            user_input=query,
+            trace_context={
+                "session_id": session_id,
+                "trace_id": "inspect",
+                "turn_index": -1,
+                "span_id": "inspect",
+                "parent_span_id": "inspect",
+            },
+        )
+    )
+    payload = {
+        "selected_messages": working.report.selected_messages,
+        "retrieved_memory_count": working.report.retrieved_memory_count,
+        "token_estimate": working.report.token_estimate,
+        "compaction_ops": [op.kind for op in working.compaction_operations],
+        "messages": working.messages,
+    }
+    typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 @app.command("eval-run")

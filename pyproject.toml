@@ -36,4 +36,4 @@ dev = [
 ana = "ana.cli:app"
 
 [tool.setuptools]
-packages = ["ana", "ana.app", "ana.channels", "ana.core", "ana.providers", "ana.tools"]
+packages = ["ana", "ana.app", "ana.channels", "ana.context_manager", "ana.core", "ana.providers", "ana.tools"]
