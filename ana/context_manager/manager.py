@@ -6,7 +6,7 @@ from typing import Any
 from ana.context_manager.editor import ContextEditor
 from ana.context_manager.retriever import MemoryRetriever
 from ana.context_manager.store import ContextMemoryStore
-from ana.context_manager.types import ContextBuildReport, RetrievedMemorySet, WorkingSet
+from ana.context_manager.types import CompactionOperation, ContextBuildReport, RetrievedMemorySet, WorkingSet
 from ana.providers.base import LLMProvider
 
 
@@ -233,7 +233,7 @@ class ContextManager:
     async def _apply_model_assisted_compaction(
         self,
         messages: list[dict[str, Any]],
-    ) -> tuple[list[dict[str, Any]], Any | None]:
+    ) -> tuple[list[dict[str, Any]], CompactionOperation | None]:
         if self.provider is None:
             raise RuntimeError("no provider for model-assisted compaction")
         target_idx = -1
@@ -263,12 +263,13 @@ class ContextManager:
         cloned[target_idx] = dict(cloned[target_idx])
         cloned[target_idx]["content"] = summary[:220] + "\n...[model-assisted summary]..."
         after = self.editor.estimate_tokens(cloned)
-        op = type("CompactionOp", (), {})()
-        op.kind = "model_assisted_summary"
-        op.reason = "model_assisted"
-        op.saved_tokens = max(0, before - after)
-        op.before_tokens = before
-        op.after_tokens = after
+        op = CompactionOperation(
+            kind="model_assisted_summary",
+            reason="model_assisted",
+            saved_tokens=max(0, before - after),
+            before_tokens=before,
+            after_tokens=after,
+        )
         return cloned, op
 
     def _emit(self, event_type: str, trace_context: dict[str, Any], **fields: Any) -> None:
@@ -287,4 +288,3 @@ class ContextManager:
         }
         payload.update({key: value for key, value in fields.items() if value is not None})
         self.trace_sink(payload)
-
