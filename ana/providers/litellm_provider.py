@@ -40,9 +40,13 @@ class LiteLLMProvider(LLMProvider):
 
     async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> LLMResponse:
         api_key = self._resolve_api_key()
+        normalized_messages = self._normalize_messages_for_model(messages)
+        model_family = self._model_family(self.model)
+        system_count_before = self._count_role(messages, "system")
+        system_count_after = self._count_role(normalized_messages, "system")
         kwargs: dict[str, Any] = {
             "model": self.model,
-            "messages": messages,
+            "messages": normalized_messages,
             "tools": tools,
             "tool_choice": "auto",
             "timeout": self.timeout_seconds,
@@ -68,7 +72,10 @@ class LiteLLMProvider(LLMProvider):
             has_api_key=bool(api_key),
             has_base_url=bool(self.api_base),
             has_api_version=bool(self.api_version),
-            messages_count=len(messages),
+            model_family=model_family,
+            messages_count=len(normalized_messages),
+            system_count_before=system_count_before,
+            system_count_after=system_count_after,
             tools_count=len(tools),
             timeout_seconds=self.timeout_seconds,
         )
@@ -156,6 +163,51 @@ class LiteLLMProvider(LLMProvider):
         if not self._looks_like_env_name(self.api_key_env) and self._looks_like_secret(self.api_key_env):
             return self.api_key_env
         return None
+
+    def _normalize_messages_for_model(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized = [dict(item) for item in messages]
+        if not self._is_minimax_model(self.model):
+            return normalized
+        system_indexes = [idx for idx, item in enumerate(normalized) if str(item.get("role", "")) == "system"]
+        if len(system_indexes) <= 1:
+            return normalized
+        first_index = system_indexes[0]
+        merged_system = dict(normalized[first_index])
+        merged_parts = [
+            str(normalized[idx].get("content", "")).strip()
+            for idx in system_indexes
+            if str(normalized[idx].get("content", "")).strip()
+        ]
+        if merged_parts:
+            merged_system["content"] = "\n\n".join(merged_parts)
+        system_index_set = set(system_indexes)
+        compacted: list[dict[str, Any]] = []
+        for idx, item in enumerate(normalized):
+            if idx == first_index:
+                compacted.append(merged_system)
+                continue
+            if idx in system_index_set:
+                continue
+            compacted.append(item)
+        return compacted
+
+    @staticmethod
+    def _is_minimax_model(model: str) -> bool:
+        return "minimax" in str(model or "").strip().lower()
+
+    @staticmethod
+    def _model_family(model: str) -> str:
+        model_name = str(model or "").strip().lower()
+        if not model_name:
+            return ""
+        if "minimax" in model_name:
+            return "minimax"
+        return model_name.split("/", 1)[0]
+
+    @staticmethod
+    def _count_role(messages: list[dict[str, Any]], role: str) -> int:
+        role_name = str(role or "")
+        return sum(1 for item in messages if str(item.get("role", "")) == role_name)
 
     @staticmethod
     def _iter_tool_calls(message: Any) -> list[Any]:
